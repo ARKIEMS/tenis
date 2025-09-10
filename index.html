@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
+    <title>TennisAI Pro - Árbitro Digital</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: white;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            position: fixed;
+        }
+
+        #cameraContainer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        #cameraView {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Líneas de la cancha superpuestas */
+        .court-overlay {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .court-guide {
+            position: absolute;
+            width: 80%;
+            height: 70%;
+            left: 10%;
+            top: 15%;
+            border: 3px solid rgba(0, 255, 0, 0.7);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+        }
+
+        .court-guide::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 3px;
+            background: rgba(0, 255, 0, 0.5);
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .court-guide::after {
+            content: '';
+            position: absolute;
+            width: 3px;
+            height: 100%;
+            background: rgba(0, 255, 0, 0.5);
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .service-box {
+            position: absolute;
+            width: 100%;
+            height: 40%;
+            bottom: 0;
+            border-top: 2px solid rgba(255, 255, 0, 0.5);
+        }
+
+        .singles-lines {
+            position: absolute;
+            width: 70%;
+            height: 100%;
+            left: 15%;
+            border-left: 2px solid rgba(255, 255, 255, 0.5);
+            border-right: 2px solid rgba(255, 255, 255, 0.5);
+        }
+
+        /* Panel de puntuación estilo tenis real */
+        .score-board {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, rgba(0,0,0,0.95), rgba(20,20,20,0.95));
+            padding: 15px 25px;
+            border-radius: 20px;
+            z-index: 20;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255,255,255,0.2);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .score-display {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .player-score {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .player-name {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .score-number {
+            font-size: 32px;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            text-shadow: 0 0 10px rgba(0,255,0,0.5);
+        }
+
+        .score-separator {
+            font-size: 28px;
+            color: #444;
+        }
+
+        .serving-indicator {
+            width: 8px;
+            height: 8px;
+            background: #ffff00;
+            border-radius: 50%;
+            margin-left: 5px;
+            display: inline-block;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        /* Panel de control principal */
+        .control-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.98), rgba(0,0,0,0.85));
+            padding: 20px 15px;
+            z-index: 20;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .game-score {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+        }
+
+        .game-score-item {
+            text-align: center;
+        }
+
+        .game-score-label {
+            font-size: 10px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .game-score-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #00ff00;
+        }
+
+        .main-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            padding: 20px;
+            border: none;
+            border-radius: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:active::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-point-player {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+        }
+
+        .btn-point-opponent {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            box-shadow: 0 5px 15px rgba(33, 150, 243, 0.3);
+        }
+
+        .btn-fault {
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            grid-column: span 2;
+        }
+
+        .btn-new-game {
+            background: linear-gradient(135deg, #9C27B0, #7B1FA2);
+            grid-column: span 2;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+        }
+
+        .quick-btn {
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 25px;
+            color: white;
+            font-size: 14px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .quick-btn:active {
+            background: rgba(255,255,255,0.3);
+            transform: scale(0.95);
+        }
+
+        .quick-btn.active {
+            background: rgba(255,255,255,0.3);
+            border-color: #00ff00;
+            color: #00ff00;
+        }
+
+        /* Indicador de decisión */
+        .decision-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .decision-text {
+            font-size: 60px;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 20px 40px;
+            border-radius: 20px;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.3s ease;
+        }
+
+        .decision-text.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .decision-text.in {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            box-shadow: 0 10px 40px rgba(76, 175, 80, 0.6);
+        }
+
+        .decision-text.out {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+            color: white;
+            box-shadow: 0 10px 40px rgba(244, 67, 54, 0.6);
+        }
+
+        .decision-text.ace {
+            background: linear-gradient(135deg, #FFD700, #FFA000);
+            color: black;
+            box-shadow: 0 10px 40px rgba(255, 215, 0, 0.6);
+        }
+
+        /* Botón de inicio */
+        #startScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .start-content {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .app-title {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #00ff00, #00ffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .app-subtitle {
+            font-size: 18px;
+            color: #888;
+            margin-bottom: 40px;
+        }
+
+        .start-btn {
+            padding: 20px 50px;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(76, 175, 80, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .start-btn:active {
+            transform: scale(0.95);
+        }
+
+        .camera-error {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+            border-radius: 10px;
+            color: #ff9999;
+        }
+
+        /* Marcadores de impacto */
+        .impact-marker {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 15;
+            animation: impact-fade 2s ease-out forwards;
+        }
+
+        .impact-marker.in {
+            background: radial-gradient(circle, rgba(76, 255, 80, 0.9), transparent);
+            border: 3px solid #4CAF50;
+        }
+
+        .impact-marker.out {
+            background: radial-gradient(circle, rgba(255, 67, 54, 0.9), transparent);
+            border: 3px solid #f44336;
+        }
+
+        @keyframes impact-fade {
+            0% {
+                transform: translate(-50%, -50%) scale(0.5);
+                opacity: 1;
+            }
+            50% {
+                transform: translate(-50%, -50%) scale(1.5);
+                opacity: 0.8;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(2);
+                opacity: 0;
+            }
+        }
+
+        /* Estadísticas del set */
+        .set-stats {
+            position: fixed;
+            top: 90px;
+            right: 10px;
+            background: rgba(0,0,0,0.9);
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 12px;
+            z-index: 20;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 5px;
+            color: #ccc;
+        }
+
+        .stat-value {
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        /* Touch area para marcar puntos */
+        .touch-overlay {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        /* Modo horizontal forzado */
+        @media (orientation: portrait) {
+            .rotate-message {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: #000;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 2000;
+                padding: 20px;
+                text-align: center;
+            }
+
+            .rotate-message::before {
+                content: "📱 Gira tu teléfono a modo horizontal para mejor experiencia";
+                font-size: 18px;
+                color: white;
+            }
+        }
+
+        .settings-menu {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 25;
+        }
+
+        .settings-btn {
+            width: 40px;
+            height: 40px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .settings-btn:active {
+            transform: scale(0.9);
+            background: rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="startScreen">
+        <div class="start-content">
+            <div class="app-title">🎾 TennisAI Pro</div>
+            <div class="app-subtitle">Sistema de Puntuación Profesional</div>
+            <button class="start-btn" id="startBtn">INICIAR PARTIDO</button>
+            <div class="camera-error" id="cameraError">
+                ⚠️ Error de cámara. Verifica los permisos en la configuración.
+            </div>
+        </div>
+    </div>
+
+    <div id="cameraContainer">
+        <video id="cameraView" autoplay playsinline muted></video>
+        
+        <div class="court-overlay">
+            <div class="court-guide">
+                <div class="service-box"></div>
+                <div class="singles-lines"></div>
+            </div>
+        </div>
+
+        <div class="touch-overlay" id="touchArea"></div>
+    </div>
+
+    <div class="score-board">
+        <div class="score-display">
+            <div class="player-score">
+                <div class="player-name">TÚ <span class="serving-indicator" id="serve1" style="display:none"></span></div>
+                <div class="score-number" id="score1">0</div>
+            </div>
+            <div class="score-separator">:</div>
+            <div class="player-score">
+                <div class="player-name">RIVAL <span class="serving-indicator" id="serve2" style="display:none"></span></div>
+                <div class="score-number" id="score2">0</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="set-stats">
+        <div class="stat-row">
+            <span>Sets:</span>
+            <span class="stat-value"><span id="sets1">0</span> - <span id="sets2">0</span></span>
+        </div>
+        <div class="stat-row">
+            <span>Juegos:</span>
+            <span class="stat-value"><span id="games1">0</span> - <span id="games2">0</span></span>
+        </div>
+        <div class="stat-row">
+            <span>Aces:</span>
+            <span class="stat-value" id="aces">0</span>
+        </div>
+        <div class="stat-row">
+            <span>Faltas:</span>
+            <span class="stat-value" id="faults">0</span>
+        </div>
+    </div>
+
+    <div class="settings-menu">
+        <button class="settings-btn" id="settingsBtn">⚙️</button>
+    </div>
+
+    <div class="control-panel">
+        <div class="game-score">
+            <div class="game-score-item">
+                <div class="game-score-label">Sets</div>
+                <div class="game-score-value"><span id="setsBottom1">0</span>-<span id="setsBottom2">0</span></div>
+            </div>
+            <div class="game-score-item">
+                <div class="game-score-label">Juegos</div>
+                <div class="game-score-value"><span id="gamesBottom1">0</span>-<span id="gamesBottom2">0</span></div>
+            </div>
+            <div class="game-score-item">
+                <div class="game-score-label">Puntos</div>
+                <div class="game-score-value"><span id="pointsBottom1">0</span>-<span id="pointsBottom2">0</span></div>
+            </div>
+        </div>
+
+        <div class="main-buttons">
+            <button class="btn btn-point-player" id="btnPlayer">👤 MI PUNTO</button>
+            <button class="btn btn-point-opponent" id="btnOpponent">🎾 PUNTO RIVAL</button>
+            <button class="btn btn-fault" id="btnFault">❌ FALTA / DOBLE FALTA</button>
+            <button class="btn btn-new-game" id="btnNewGame">🔄 NUEVO PARTIDO</button>
+        </div>
+
+        <div class="quick-actions">
+            <button class="quick-btn" id="btnAce">ACE</button>
+            <button class="quick-btn" id="btnLet">LET</button>
+            <button class="quick-btn active" data-mode="singles">Singles</button>
+            <button class="quick-btn" data-mode="doubles">Dobles</button>
+            <button class="quick-btn" id="btnUndo">↶ Deshacer</button>
+            <button class="quick-btn" id="btnSound">🔊</button>
+        </div>
+    </div>
+
+    <div class="decision-indicator">
+        <div class="decision-text" id="decisionText"></div>
+    </div>
+
+    <script>
+        class TennisScoreSystem {
+            constructor() {
+                this.video = null;
+                this.stream = null;
+                this.score = {
+                    player1: { points: 0, games: 0, sets: 0 },
+                    player2: { points: 0, games: 0, sets: 0 }
+                };
+                this.serving = 1; // 1 o 2
+                this.faultCount = 0;
+                this.aceCount = 0;
+                this.soundEnabled = true;
+                this.history = [];
+                this.touchActive = false;
+                
+                this.init();
+            }
+
+            init() {
+                // Botón de inicio
+                document.getElementById('startBtn').addEventListener('click', () => {
+                    this.startApp();
+                });
+
+                // Botones de puntos
+                document.getElementById('btnPlayer').addEventListener('click', () => {
+                    this.addPoint(1);
+                    this.showDecision('¡PUNTO!', 'in');
+                });
+
+                document.getElementById('btnOpponent').addEventListener('click', () => {
+                    this.addPoint(2);
+                    this.showDecision('PUNTO RIVAL', 'out');
+                });
+
+                // Botón de falta
+                document.getElementById('btnFault').addEventListener('click', () => {
+                    this.handleFault();
+                });
+
+                // Botón de ACE
+                document.getElementById('btnAce').addEventListener('click', () => {
+                    this.aceCount++;
+                    document.getElementById('aces').textContent = this.aceCount;
+                    this.addPoint(this.serving);
+                    this.showDecision('¡ACE!', 'ace');
+                    this.playSound('ace');
+                });
+
+                // Botón LET
+                document.getElementById('btnLet').addEventListener('click', () => {
+                    this.showDecision('LET', 'out');
+                    this.faultCount = 0; // Reset fault count on let
+                });
+
+                // Nuevo juego
+                document.getElementById('btnNewGame').addEventListener('click', () => {
+                    if(confirm('¿Reiniciar partido completo?')) {
+                        this.resetMatch();
+                    }
+                });
+
+                // Deshacer
+                document.getElementById('btnUndo').addEventListener('click', () => {
+                    this.undoLastAction();
+                });
+
+                // Sonido
+                document.getElementById('btnSound').addEventListener('click', (e) => {
+                    this.soundEnabled = !this.soundEnabled;
+                    e.target.textContent = this.soundEnabled ? '🔊' : '🔇';
+                });
+
+                // Touch en pantalla para marcar puntos
+                document.getElementById('touchArea').addEventListener('touchstart', (e) => {
+                    if (!this.touchActive) {
+                        this.handleTouch(e);
+                    }
+                });
+
+                // Cambio de modo
+                document.querySelectorAll('[data-mode]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        if (e.target.dataset.mode) {
+                            document.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
+                            e.target.classList.add('active');
+                        }
+                    });
+                });
+
+                // Actualizar indicador de saque
+                this.updateServeIndicator();
+            }
+
+            async startApp() {
+                try {
+                    await this.initCamera();
+                    document.getElementById('startScreen').style.display = 'none';
+                } catch (error) {
+                    document.getElementById('cameraError').style.display = 'block';
+                    console.error('Error iniciando la app:', error);
+                }
+            }
+
+            async initCamera() {
+                try {
+                    // Intentar diferentes configuraciones de cámara
+                    const constraints = {
+                        video: {
+                            facingMode: { ideal: 'environment' },
+                            width: { ideal: 1920, min: 640 },
+                            height: { ideal: 1080, min: 480 }
+                        },
+                        audio: false
+                    };
+
+                    // Primero intentar con la configuración ideal
+                    try {
+                        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    } catch (e) {
+                        // Si falla, intentar con configuración básica
+                        console.log('Intentando configuración básica de cámara...');
+                        this.stream = await navigator.mediaDevices.getUserMedia({ 
+                            video: true, 
+                            audio: false 
+                        });
+                    }
+
+                    this.video = document.getElementById('cameraView');
+                    this.video.srcObject = this.stream;
+                    
+                    // Asegurar que el video se reproduce
+                    this.video.play().catch(e => {
+                        console.log('Autoplay bloqueado, requiere interacción del usuario');
+                    });
+
+                    // Mantener pantalla encendida
+                    if ('wakeLock' in navigator) {
+                        try {
+                            await navigator.wakeLock.request('screen');
+                        } catch (e) {
+                            console.log('Wake Lock no disponible');
+                        }
+                    }
+
+                } catch (error) {
+                    console.error('Error accediendo a la cámara:', error);
+                    throw error;
+                }
+            }
+
+            addPoint(player) {
+                // Guardar estado para deshacer
+                this.saveHistory();
+
+                const current = player === 1 ? this.score.player1 : this.score.player2;
+                const opponent = player === 1 ? this.score.player2 : this.score.player1;
+
+                // Sistema de puntuación de tenis
+                if (current.points === 0) {
+                    current.points = 15;
+                } else if (current.points === 15) {
+                    current.points = 30;
+                } else if (current.points === 30) {
+                    current.points = 40;
+                } else if (current.points === 40) {
+                    if (opponent.points === 40) {
+                        // Deuce
+                        current.points = 'AD';
+                        opponent.points = 30;
+                    } else if (opponent.points === 'AD') {
+                        // Volver a deuce
+                        current.points = 40;
+                        opponent.points = 40;
+                    } else {
+                        // Ganar juego
+                        this.winGame(player);
+                    }
+                } else if (current.points === 'AD') {
+                    // Ganar juego desde ventaja
+                    this.winGame(player);
+                }
+
+                this.updateDisplay();
+                this.playSound('point');
+            }
+
+            winGame(player) {
+                const current = player === 1 ? this.score.player1 : this.score.player2;
+                const opponent = player === 1 ? this.score.player2 : this.score.player1;
+
+                current.games++;
+                
+                // Reset puntos
+                current.points = 0;
+                opponent.points = 0;
+
+                // Verificar si gana el set (6 juegos con diferencia de 2)
+                if (current.games >= 6 && current.games - opponent.games >= 2) {
+                    this.winSet(player);
+                } else if (current.games === 6 && opponent.games === 6) {
+                    // Tie-break en 6-6
+                    this.showDecision('TIE-BREAK', 'ace');
+                }
+
+                // Cambiar saque cada juego
+                this.serving = this.serving === 1 ? 2 : 1;
+                this.updateServeIndicator();
+                
+                this.playSound('game');
+            }
+
+            winSet(player) {
+                const current = player === 1 ? this.score.player1 : this.score.player2;
+                
+                current.sets++;
+                
+                // Reset juegos
+                this.score.player1.games = 0;
+                this.score.player2.games = 0;
+
+                // Verificar si gana el partido (mejor de 3 sets)
+                if (current.sets >= 2) {
+                    this.showDecision(`¡PARTIDO GANADO!`, 'ace');
+                    this.playSound('match');
+                    setTimeout(() => {
+                        if(confirm('¿Iniciar nuevo partido?')) {
+                            this.resetMatch();
+                        }
+                    }, 2000);
+                } else {
+                    this.showDecision(`¡SET PARA ${player === 1 ? 'TÚ' : 'RIVAL'}!`, 'ace');
+                    this.playSound('set');
+                }
+            }
+
+            handleFault() {
+                this.faultCount++;
+                document.getElementById('faults').textContent = this.faultCount;
+                
+                if (this.faultCount % 2 === 0) {
+                    // Doble falta - punto para el oponente
+                    this.showDecision('DOBLE FALTA', 'out');
+                    this.addPoint(this.serving === 1 ? 2 : 1);
+                } else {
+                    // Primera falta
+                    this.showDecision('FALTA', 'out');
+                }
+                
+                this.playSound('fault');
+            }
+
+            handleTouch(e) {
+                e.preventDefault();
+                this.touchActive = true;
+                
+                const touch = e.touches[0];
+                const x = touch.clientX;
+                const y = touch.clientY;
+                
+                // Crear marcador visual
+                this.createImpactMarker(x, y);
+                
+                // Determinar si está dentro o fuera basado en la posición
+                const courtGuide = document.querySelector('.court-guide');
+                const rect = courtGuide.getBoundingClientRect();
+                
+                const isIn = x >= rect.left && x <= rect.right && 
+                           y >= rect.top && y <= rect.bottom;
+                
+                if (isIn) {
+                    this.addPoint(1);
+                    this.showDecision('DENTRO', 'in');
+                } else {
+                    this.addPoint(2);
+                    this.showDecision('FUERA', 'out');
+                }
+                
+                // Vibración táctil
+                if (navigator.vibrate) {
+                    navigator.vibrate(isIn ? 50 : [50, 30, 50]);
+                }
+                
+                setTimeout(() => {
+                    this.touchActive = false;
+                }, 500);
+            }
+
+            createImpactMarker(x, y) {
+                const marker = document.createElement('div');
+                marker.className = 'impact-marker in';
+                marker.style.left = x + 'px';
+                marker.style.top = y + 'px';
+                document.body.appendChild(marker);
+                
+                setTimeout(() => marker.remove(), 2000);
+            }
+
+            updateDisplay() {
+                // Actualizar puntos principales
+                document.getElementById('score1').textContent = this.formatPoints(this.score.player1.points);
+                document.getElementById('score2').textContent = this.formatPoints(this.score.player2.points);
+                
+                // Actualizar sets
+                document.getElementById('sets1').textContent = this.score.player1.sets;
+                document.getElementById('sets2').textContent = this.score.player2.sets;
+                document.getElementById('setsBottom1').textContent = this.score.player1.sets;
+                document.getElementById('setsBottom2').textContent = this.score.player2.sets;
+                
+                // Actualizar juegos
+                document.getElementById('games1').textContent = this.score.player1.games;
+                document.getElementById('games2').textContent = this.score.player2.games;
+                document.getElementById('gamesBottom1').textContent = this.score.player1.games;
+                document.getElementById('gamesBottom2').textContent = this.score.player2.games;
+                
+                // Actualizar puntos en panel inferior
+                document.getElementById('pointsBottom1').textContent = this.formatPoints(this.score.player1.points);
+                document.getElementById('pointsBottom2').textContent = this.formatPoints(this.score.player2.points);
+            }
+
+            formatPoints(points) {
+                if (points === 'AD') return 'AD';
+                return points.toString();
+            }
+
+            updateServeIndicator() {
+                document.getElementById('serve1').style.display = this.serving === 1 ? 'inline-block' : 'none';
+                document.getElementById('serve2').style.display = this.serving === 2 ? 'inline-block' : 'none';
+            }
+
+            showDecision(text, type) {
+                const decisionEl = document.getElementById('decisionText');
+                decisionEl.textContent = text;
+                decisionEl.className = `decision-text ${type}`;
+                decisionEl.classList.add('show');
+                
+                setTimeout(() => {
+                    decisionEl.classList.remove('show');
+                }, 1500);
+            }
+
+            playSound(type) {
+                if (!this.soundEnabled) return;
+                
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                switch(type) {
+                    case 'point':
+                        oscillator.frequency.value = 600;
+                        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+                        break;
+                    case 'game':
+                        oscillator.frequency.value = 800;
+                        gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                        break;
+                    case 'set':
+                        oscillator.frequency.value = 1000;
+                        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                        break;
+                    case 'ace':
+                        oscillator.frequency.value = 1200;
+                        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+                        break;
+                    case 'fault':
+                        oscillator.frequency.value = 300;
+                        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+                        break;
+                    case 'match':
+                        oscillator.frequency.value = 1500;
+                        gainNode.gain.setValueAtTime(0.6, audioContext.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+                        break;
+                }
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 1);
+            }
+
+            saveHistory() {
+                this.history.push(JSON.parse(JSON.stringify(this.score)));
+                if (this.history.length > 10) {
+                    this.history.shift();
+                }
+            }
+
+            undoLastAction() {
+                if (this.history.length > 0) {
+                    this.score = this.history.pop();
+                    this.updateDisplay();
+                    this.showDecision('DESHECHO', 'out');
+                }
+            }
+
+            resetMatch() {
+                this.score = {
+                    player1: { points: 0, games: 0, sets: 0 },
+                    player2: { points: 0, games: 0, sets: 0 }
+                };
+                this.serving = 1;
+                this.faultCount = 0;
+                this.aceCount = 0;
+                this.history = [];
+                
+                document.getElementById('aces').textContent = '0';
+                document.getElementById('faults').textContent = '0';
+                
+                this.updateDisplay();
+                this.updateServeIndicator();
+                this.showDecision('NUEVO PARTIDO', 'ace');
+            }
+        }
+
+        // Iniciar la aplicación
+        const app = new TennisScoreSystem();
+
+        // Prevenir zoom con doble tap
+        document.addEventListener('touchend', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+
+        // Prevenir scroll
+        document.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+    </script>
+</body>
+</html>
